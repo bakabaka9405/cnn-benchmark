@@ -64,20 +64,26 @@ class ImageDataset:
 				self.dataset = dataset
 				self.indices = indices
 				self.transform = train_transform
-				self.buffer: list[list[tuple[torch.Tensor, int]]] = [[] for i in range(len(indices))]
-				# self.lock = [threading.Lock() for i in range(len(indices))]
+				self.buffer: list[list[torch.Tensor]] = [[] for i in range(len(indices))]
+				self.next_index: list[int] = [0 for i in range(len(indices))]
+				self.thread_next_index: list[int] = [0 for i in range(len(indices))]
 				self.thread: threading.Thread | None = None
 				self.thread_end = False
+
+				for p in range(len(indices)):
+					image = dataset.image_tensors[indices[p]]
+					for _ in range(20):
+						self.buffer[p].append(self.transform(image))
 
 			def __len__(self):
 				return len(self.indices)
 
 			def __getitem__(self, idx: int):
-				if len(self.buffer[idx]) != 0:
-					return self.buffer[idx].pop()
-
-				image, label = self.dataset[self.indices[idx]]
-				return self.transform(image), label
+				res = self.buffer[idx][self.next_index[idx]], self.dataset.labels[self.indices[idx]]
+				self.next_index[idx] = self.next_index[idx] + 1
+				if self.next_index[idx] >= len(self.buffer[idx]):
+					self.next_index[idx] = 0
+				return res
 
 			def start_make_buffer(self):
 				def make_buffer():
@@ -85,12 +91,13 @@ class ImageDataset:
 					while not self.thread_end:
 						if p >= len(self.indices):
 							p = 0
-						if len(self.buffer[p]) >= 10:
-							p = p + 1
-							continue
-						image, label = self.dataset[self.indices[p]]
-						self.buffer[p].append((self.transform(image), label))
-						p = p + 1
+						idx = self.thread_next_index[p]
+						image = self.dataset.image_tensors[self.indices[idx]]
+						self.buffer[p][idx] = self.transform(image)
+						idx = idx + 1
+						if idx >= 20:
+							idx = 0
+						self.thread_next_index[p] = idx
 
 				self.thread = threading.Thread(target=make_buffer)
 				self.thread.start()

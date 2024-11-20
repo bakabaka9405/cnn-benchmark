@@ -2,6 +2,7 @@ from itertools import product
 from Util import GetDevice, GetModel, LoadDataset, GetDataLoader
 import Trainer
 import torch
+import gc
 
 dataset_root = r'C:\Resources\Datasets\Smile\笑线高度'
 save_path_root = r'C:/Temp/Benchmark/'
@@ -46,7 +47,7 @@ model_lst = [
 	'timm:mobilenetv4_hybrid_large',
 ]
 num_classes = 3
-epochs = 200
+epochs = 100
 
 
 def DownloadModel(model_name: str):
@@ -59,6 +60,9 @@ def main():
 	dataset = LoadDataset(device, dataset_root)
 	print('dataset loaded')
 	criterion = torch.nn.CrossEntropyLoss()
+	train_loader = None
+	val_loader = None
+	last_used_batch_size = 0
 	for pretrained, batch_size, lr, model_name in product(pretrained_lst, batch_size_lst, lr_lst, model_lst):
 		print(f'model: {model_name}, pretrained: {pretrained}, batch_size: {batch_size}, lr: {lr}')
 
@@ -70,11 +74,22 @@ def main():
 			continue
 		print('model ready')
 
-		train_loader, val_loader = GetDataLoader(dataset, batch_size, 1000)
-		train_loader.dataset.start_make_buffer()  # type: ignore
+		if last_used_batch_size != batch_size:
+			last_used_batch_size = batch_size
+			if train_loader is not None:
+				train_loader.dataset.stop_thread()  # type: ignore
+			train_loader, val_loader = GetDataLoader(dataset, batch_size, 1000)
+			train_loader.dataset.start_make_buffer()  # type: ignore
 		print('DataLoader ready')
 
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+		gc.collect()
+		torch.cuda.empty_cache()
+
+		# just make linter happy
+		assert train_loader is not None
+		assert val_loader is not None
 
 		param = Trainer.TrainParameters(
 			device=device,
@@ -94,7 +109,9 @@ def main():
 
 		Trainer.Train(param)
 
+	if train_loader is not None:
 		train_loader.dataset.stop_thread()  # type: ignore
+
 
 if __name__ == '__main__':
 	main()
