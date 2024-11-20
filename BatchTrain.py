@@ -71,6 +71,7 @@ def main():
 		print('model ready')
 
 		train_loader, val_loader = GetDataLoader(dataset, batch_size, 1000)
+		train_loader.dataset.start_make_buffer()  # type: ignore
 		print('DataLoader ready')
 
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -93,6 +94,7 @@ def main():
 
 		Trainer.Train(param)
 
+		train_loader.dataset.stop_thread()  # type: ignore
 
 if __name__ == '__main__':
 	main()

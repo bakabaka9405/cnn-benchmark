@@ -19,8 +19,6 @@ class ZeroOneNormalize:
 
 
 def GetTrainTransform():
-	# import torchvision.transforms.functional as F
-
 	return transforms.Compose(
 		[
 			transforms.RandomAffine(0, shear=10, scale=(0.8, 1.2)),
@@ -50,10 +48,7 @@ def LoadDataset(device: torch.device, dataset_root: str):
 
 
 def GetDataLoader(dataset: ImageDataset, train_batchsize: int, test_batchsize: int, ratio: float = 0.8):
-	train_set, test_set = dataset.random_split(ratio)
-	train_set.transform = GetTrainTransform()
-	test_set.transform = GetValTransform()
-	test_set.preload()
+	train_set, test_set = dataset.random_split(GetTrainTransform(), GetValTransform(), ratio)
 	train_loader = DataLoader(train_set, batch_size=train_batchsize, shuffle=True)
 	test_loader = DataLoader(test_set, batch_size=test_batchsize, shuffle=False)
 	return train_loader, test_loader
