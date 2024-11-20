@@ -66,14 +66,6 @@ def main():
 	for pretrained, batch_size, lr, model_name in product(pretrained_lst, batch_size_lst, lr_lst, model_lst):
 		print(f'model: {model_name}, pretrained: {pretrained}, batch_size: {batch_size}, lr: {lr}')
 
-		try:
-			model = GetModel(model_name, num_classes, pretrained)
-			model.to(device)
-		except Exception as e:
-			print(f'Error: {e}, skipped')
-			continue
-		print('model ready')
-
 		if last_used_batch_size != batch_size:
 			last_used_batch_size = batch_size
 			if train_loader is not None:
@@ -82,10 +74,18 @@ def main():
 			train_loader.dataset.start_make_buffer()  # type: ignore
 		print('DataLoader ready')
 
-		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+		try:
+			model = None
+			gc.collect()
+			torch.cuda.empty_cache()
+			model = GetModel(model_name, num_classes, pretrained)
+			model.to(device)
+		except Exception as e:
+			print(f'Error: {e}, skipped')
+			continue
+		print('model ready')
 
-		gc.collect()
-		torch.cuda.empty_cache()
+		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 		# just make linter happy
 		assert train_loader is not None
@@ -108,6 +108,7 @@ def main():
 		)
 
 		Trainer.Train(param)
+		print(train_loader.dataset.visit, train_loader.dataset.make)  # type: ignore
 
 	if train_loader is not None:
 		train_loader.dataset.stop_thread()  # type: ignore

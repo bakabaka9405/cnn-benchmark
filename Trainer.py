@@ -35,7 +35,7 @@ def Mkdir(path: str) -> None:
 		os.makedirs(path)
 
 
-def CalcScore(labels, preditions) -> tuple[float, float, float, float]:
+def calc_score(labels, preditions) -> tuple[float, float, float, float]:
 	acc = accuracy_score(labels, preditions, normalize=True)
 	precision = precision_score(labels, preditions, average='macro', zero_division=1)
 	recall = recall_score(labels, preditions, average='macro', zero_division=1)
@@ -140,7 +140,7 @@ def Train(param: TrainParameters) -> None:
 				total += labels.size(0)
 				y_true.extend(labels.cpu().numpy())
 				y_pred.extend(predicted.cpu().numpy())
-		acc, precision, recall, f1 = CalcScore(y_true, y_pred)
+		acc, precision, recall, f1 = calc_score(y_true, y_pred)
 		save_score(loss, acc, precision, recall, f1)
 		update_best(f1, y_true, y_pred)
 		print_score(i, loss, acc, precision, recall, f1)

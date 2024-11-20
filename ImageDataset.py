@@ -69,35 +69,34 @@ class ImageDataset:
 				self.thread_next_index: list[int] = [0 for i in range(len(indices))]
 				self.thread: threading.Thread | None = None
 				self.thread_end = False
+				self.make = 0
+				self.visit = 0
 
 				for p in range(len(indices)):
 					image = dataset.image_tensors[indices[p]]
-					for _ in range(20):
+					for _ in range(32):
 						self.buffer[p].append(self.transform(image))
 
 			def __len__(self):
 				return len(self.indices)
 
 			def __getitem__(self, idx: int):
+				self.visit += 1
 				res = self.buffer[idx][self.next_index[idx]], self.dataset.labels[self.indices[idx]]
-				self.next_index[idx] = self.next_index[idx] + 1
-				if self.next_index[idx] >= len(self.buffer[idx]):
-					self.next_index[idx] = 0
+				self.next_index[idx] = (self.next_index[idx] + 1) & 31
 				return res
 
 			def start_make_buffer(self):
 				def make_buffer():
 					p = 0
 					while not self.thread_end:
-						if p >= len(self.indices):
-							p = 0
 						idx = self.thread_next_index[p]
-						image = self.dataset.image_tensors[self.indices[idx]]
+						image = self.dataset.image_tensors[self.indices[p]]
 						self.buffer[p][idx] = self.transform(image)
-						idx = idx + 1
-						if idx >= 20:
-							idx = 0
+						idx = (idx + 1) & 31
 						self.thread_next_index[p] = idx
+						p = (p + 1) % len(self.indices)
+						self.make += 1
 
 				self.thread = threading.Thread(target=make_buffer)
 				self.thread.start()
