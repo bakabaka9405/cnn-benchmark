@@ -47,7 +47,7 @@ model_lst = [
 	'timm:mobilenetv4_hybrid_large',
 ]
 num_classes = 3
-epochs = 100
+epochs = 500
 
 
 def DownloadModel(model_name: str):
@@ -108,7 +108,7 @@ def main():
 		)
 
 		Trainer.Train(param)
-		print(train_loader.dataset.visit, train_loader.dataset.make)  # type: ignore
+		print(train_loader.dataset.visit, sum(train_loader.dataset.make))  # type: ignore
 
 	if train_loader is not None:
 		train_loader.dataset.stop_thread()  # type: ignore

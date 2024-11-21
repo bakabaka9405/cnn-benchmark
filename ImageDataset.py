@@ -60,51 +60,52 @@ class ImageDataset:
 		train_size = int(ratio * len(self.labels))
 
 		class TrainingSubSet(Dataset):
-			def __init__(self, dataset: ImageDataset, indices: list[int], train_transform: transforms.Compose):
+			def __init__(self, dataset: ImageDataset, indices: list[int], train_transform: transforms.Compose, num_workers: int = 12):
 				self.dataset = dataset
 				self.indices = indices
 				self.transform = train_transform
-				self.buffer: list[list[torch.Tensor]] = [[] for i in range(len(indices))]
+				self.buffer: list[list[torch.Tensor]] = [[] for i in range(num_workers)]
 				self.next_index: list[int] = [0 for i in range(len(indices))]
 				self.thread_next_index: list[int] = [0 for i in range(len(indices))]
-				self.thread: threading.Thread | None = None
+				self.threads: list[threading.Thread | None] = [None for i in range(num_workers)]
 				self.thread_end = False
-				self.make = 0
+				self.num_workers = num_workers
+				self.make = [0 for i in range(num_workers)]
 				self.visit = 0
 
-				for p in range(len(indices)):
-					image = dataset.image_tensors[indices[p]]
-					for _ in range(32):
-						self.buffer[p].append(self.transform(image))
+				for i in range(num_workers):
+					self.buffer[i] = [self.transform(self.dataset.image_tensors[self.indices[p]]) for p in range(len(self.indices))]
 
 			def __len__(self):
 				return len(self.indices)
 
 			def __getitem__(self, idx: int):
 				self.visit += 1
-				res = self.buffer[idx][self.next_index[idx]], self.dataset.labels[self.indices[idx]]
-				self.next_index[idx] = (self.next_index[idx] + 1) & 31
+				res = self.buffer[self.next_index[idx]][idx], self.dataset.labels[self.indices[idx]]
+				self.next_index[idx] = (self.next_index[idx] + 1) % self.num_workers
 				return res
 
 			def start_make_buffer(self):
-				def make_buffer():
-					p = 0
-					while not self.thread_end:
-						idx = self.thread_next_index[p]
-						image = self.dataset.image_tensors[self.indices[p]]
-						self.buffer[p][idx] = self.transform(image)
-						idx = (idx + 1) & 31
-						self.thread_next_index[p] = idx
-						p = (p + 1) % len(self.indices)
-						self.make += 1
+				for i in range(self.num_workers):
 
-				self.thread = threading.Thread(target=make_buffer)
-				self.thread.start()
+					def make_buffer():
+						p = 0
+						while not self.thread_end:
+							image = self.dataset.image_tensors[self.indices[p]]
+							self.buffer[i][p] = self.transform(image)
+							p = (p + 1) % len(self.indices)
+							self.make[i] += 1
+
+					self.threads[i] = threading.Thread(target=make_buffer)
+					th = self.threads[i]
+					assert th is not None
+					th.start()
 
 			def stop_thread(self):
 				self.thread_end = True
-				if self.thread is not None:
-					self.thread.join()
+				for th in self.threads:
+					if th is not None:
+						th.join()
 
 		class ValidationSubSet(Dataset):
 			labels: list[int]
