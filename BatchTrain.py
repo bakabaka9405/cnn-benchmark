@@ -47,7 +47,8 @@ model_lst = [
 	'timm:mobilenetv4_hybrid_large',
 ]
 num_classes = 3
-epochs = 500
+num_loader_workers = 8
+epochs = 200
 
 
 def DownloadModel(model_name: str):
@@ -70,7 +71,7 @@ def main():
 			last_used_batch_size = batch_size
 			if train_loader is not None:
 				train_loader.dataset.stop_thread()  # type: ignore
-			train_loader, val_loader = GetDataLoader(dataset, batch_size, 1000)
+			train_loader, val_loader = GetDataLoader(dataset, batch_size, 1000, num_loader_workers=num_loader_workers)
 			train_loader.dataset.start_make_buffer()  # type: ignore
 		print('DataLoader ready')
 

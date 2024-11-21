@@ -23,11 +23,13 @@ class ImageDataset:
 
 		if any([i.endswith('.csv') for i in root_files]):  # labeled by csv
 			csv_path = ''
+			new_root = root_dir
 			for file in os.listdir(root_dir):
 				if file.endswith('.csv'):
 					csv_path = os.path.join(root_dir, file)
 				elif os.path.isdir(os.path.join(root_dir, file)):
-					self.root_dir = os.path.join(root_dir, file)
+					new_root = os.path.join(root_dir, file)
+			root_dir = new_root
 			self.image_tensors = []
 			self.labels = []
 			label_dict: dict[str, int] = {}
@@ -35,6 +37,7 @@ class ImageDataset:
 			for index, row in df.iterrows():
 				image_path = os.path.join(root_dir, row['Image'])
 				if not os.path.exists(image_path):
+					print(f'Image not found: {image_path}')
 					continue
 				# assert image_path.endswith(".jpg")
 
@@ -53,14 +56,14 @@ class ImageDataset:
 	def __getitem__(self, idx: int):
 		return self.image_tensors[idx], self.labels[idx]
 
-	def random_split(self, train_transform: transforms.Compose, val_transform: transforms.Compose, ratio: float):
+	def random_split(self, train_transform: transforms.Compose, val_transform: transforms.Compose, ratio: float, num_workers: int):
 		index = [i for i in range(len(self.labels))]
 		random.shuffle(index)
 
 		train_size = int(ratio * len(self.labels))
 
 		class TrainingSubSet(Dataset):
-			def __init__(self, dataset: ImageDataset, indices: list[int], train_transform: transforms.Compose, num_workers: int = 12):
+			def __init__(self, dataset: ImageDataset, indices: list[int], train_transform: transforms.Compose, num_workers: int):
 				self.dataset = dataset
 				self.indices = indices
 				self.transform = train_transform
@@ -121,4 +124,4 @@ class ImageDataset:
 			def __getitem__(self, idx: int):
 				return self.buffer[idx], self.labels[idx]
 
-		return TrainingSubSet(self, index[:train_size], train_transform), ValidationSubSet(self, index[train_size:], val_transform)
+		return TrainingSubSet(self, index[:train_size], train_transform, num_workers), ValidationSubSet(self, index[train_size:], val_transform)

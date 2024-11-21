@@ -47,8 +47,8 @@ def LoadDataset(device: torch.device, dataset_root: str):
 	return dataset
 
 
-def GetDataLoader(dataset: ImageDataset, train_batchsize: int, test_batchsize: int, ratio: float = 0.8):
-	train_set, test_set = dataset.random_split(GetTrainTransform(), GetValTransform(), ratio)
+def GetDataLoader(dataset: ImageDataset, train_batchsize: int, test_batchsize: int, ratio: float = 0.8, num_loader_workers: int = 4):
+	train_set, test_set = dataset.random_split(GetTrainTransform(), GetValTransform(), ratio, num_loader_workers)
 	train_loader = DataLoader(train_set, batch_size=train_batchsize, shuffle=True)
 	test_loader = DataLoader(test_set, batch_size=test_batchsize, shuffle=False)
 	return train_loader, test_loader
