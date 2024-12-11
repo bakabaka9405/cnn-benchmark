@@ -20,20 +20,20 @@ class ImageDataset:
 		if len(root_dir) == 0:
 			return
 		root_files = os.listdir(root_dir)
-
+		dataset_dir = root_dir
 		if any([i.endswith('.csv') for i in root_files]):  # labeled by csv
 			csv_path = ''
 			for file in os.listdir(root_dir):
 				if file.endswith('.csv'):
 					csv_path = os.path.join(root_dir, file)
 				elif os.path.isdir(os.path.join(root_dir, file)):
-					self.root_dir = os.path.join(root_dir, file)
+					dataset_dir = os.path.join(root_dir, file)
 			self.image_tensors = []
 			self.labels = []
 			label_dict: dict[str, int] = {}
 			df = pandas.read_csv(csv_path)
 			for index, row in df.iterrows():
-				image_path = os.path.join(root_dir, row['Image'])
+				image_path = os.path.join(dataset_dir, row['Image'])
 				if not os.path.exists(image_path):
 					continue
 				# assert image_path.endswith(".jpg")
