@@ -26,7 +26,6 @@ def GetTrainTransform():
 			transforms.Resize((128, 128)),
 			ZeroOneNormalize(),
 			transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-			# transforms.Normalize([0.691208, 0.50378054, 0.45438778], [0.14654742, 0.14745905, 0.14166589]),
 		]
 	)
 
@@ -37,7 +36,6 @@ def GetValTransform():
 			transforms.Resize((128, 128)),
 			ZeroOneNormalize(),
 			transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-			# transforms.Normalize([0.691208, 0.50378054, 0.45438778], [0.14654742, 0.14745905, 0.14166589]),
 		]
 	)
 
@@ -47,8 +45,7 @@ def LoadDataset(device: torch.device, dataset_root: str):
 	return dataset
 
 
-def GetDataLoader(dataset: ImageDataset, train_batchsize: int, test_batchsize: int, ratio: float = 0.8):
-	train_set, test_set = dataset.random_split(GetTrainTransform(), GetValTransform(), ratio)
+def GetDataLoader(train_set, test_set, train_batchsize: int, test_batchsize: int):
 	train_loader = DataLoader(train_set, batch_size=train_batchsize, shuffle=True)
 	test_loader = DataLoader(test_set, batch_size=test_batchsize, shuffle=False)
 	return train_loader, test_loader

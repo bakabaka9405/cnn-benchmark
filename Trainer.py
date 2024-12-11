@@ -17,6 +17,7 @@ import os
 class TrainParameters:
 	device: torch.device
 	model: Any
+	fold: int
 	epochs: int
 	lr: float
 	num_classes: int
@@ -71,7 +72,6 @@ def Train(param: TrainParameters) -> None:
 		best_f1 = f1
 		best_labels = labels.copy()
 		best_preds = preds.copy()
-		# best_state = param.model.state_dict()
 
 	def create_plot(save_path: str):
 		fig, axs = plt.subplots(1, 5, figsize=(30, 5))
@@ -93,7 +93,7 @@ def Train(param: TrainParameters) -> None:
 		plt.close()
 
 	def get_task_name():
-		return f'{param.model_name}_{int(param.pretrained)}_{param.lr}_{param.batch_size}'
+		return f'{param.model_name}_{int(param.pretrained)}_{param.lr}_{param.batch_size}_{param.fold}'
 
 	def save_file():
 		Mkdir(param.save_path_root)

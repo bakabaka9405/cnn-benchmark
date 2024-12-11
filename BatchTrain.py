@@ -1,85 +1,45 @@
 from itertools import product
-from Util import GetDevice, GetModel, LoadDataset, GetDataLoader
+from Util import GetModel, LoadDataset, GetDataLoader, GetTrainTransform, GetValTransform
+from KFold import KFoldGenerator
 import Trainer
 import torch
 import gc
-
-dataset_root = r'C:\Resources\Datasets\Smile\笑线高度'
-save_path_root = r'C:/Temp/Benchmark/'
-lr_lst = [0.001, 0.005, 0.0005, 0.0001, 0.00005, 0.00001]
-batch_size_lst = [128, 16, 32, 64]
-pretrained_lst = [True, False]
-model_lst = [
-	'timm:resnet18',
-	'timm:resnet34',
-	'timm:resnet50',
-	'timm:resnet101',
-	'timm:resnet152',
-	'timm:rexnet_100',
-	'timm:rexnet_130',
-	'timm:rexnet_150',
-	'timm:rexnet_200',
-	'timm:rexnet_300',
-	'timm:resnext50_32x4d',
-	'timm:resnext50d_32x4d',
-	'timm:resnext101_32x4d',
-	'timm:resnext101_32x8d',
-	'timm:resnext101_32x16d',
-	'timm:resnext101_32x32d',
-	'timm:resnext101_64x4d',
-	'timm:wide_resnet50_2',
-	'timm:wide_resnet101_2',
-	'timm:seresnext50_32x4d',
-	'timm:seresnext101_32x4d',
-	'timm:seresnext101_32x8d',
-	'timm:seresnext101_64x4d',
-	'timm:efficientnet_b4',
-	'timm:efficientnet_b5',
-	'timm:pvt_v2_b4',
-	'timm:pvt_v2_b5',
-	'timm:densenet121',
-	'timm:densenet161',
-	'timm:densenet169',
-	'timm:densenet201',
-	'timm:mobilenetv3_large_100',
-	'timm:mobilenetv3_rw',
-	'timm:mobilenetv4_conv_large',
-	'timm:mobilenetv4_hybrid_large',
-]
-num_classes = 3
-epochs = 100
+from dataclasses import dataclass
 
 
-def DownloadModel(model_name: str):
-	GetModel(model_name, num_classes, True)
+@dataclass
+class BatchTrainParameters:
+	dataset_root: str
+	save_path_root: str
+	task_name: str
+	device: torch.device
+	epochs: int
+	lr_lst: list[float]
+	batch_size_lst: list[int]
+	pretrained_lst: list[bool]
+	model_lst: list[str]
+	num_classes: int
 
 
-def main():
-	device = GetDevice()
-	print('device:', device)
-	dataset = LoadDataset(device, dataset_root)
+def BatchTrain(param: BatchTrainParameters) -> None:
+	print('task: ', param.task_name)
+	dataset = LoadDataset(param.device, param.dataset_root)
 	print('dataset loaded')
 	criterion = torch.nn.CrossEntropyLoss()
-	train_loader = None
-	val_loader = None
-	last_used_batch_size = 0
-	for pretrained, batch_size, lr, model_name in product(pretrained_lst, batch_size_lst, lr_lst, model_lst):
-		print(f'model: {model_name}, pretrained: {pretrained}, batch_size: {batch_size}, lr: {lr}')
-
-		if last_used_batch_size != batch_size:
-			last_used_batch_size = batch_size
-			if train_loader is not None:
-				train_loader.dataset.stop_thread()  # type: ignore
-			train_loader, val_loader = GetDataLoader(dataset, batch_size, 1000)
-			train_loader.dataset.start_make_buffer()  # type: ignore
+	gen = KFoldGenerator(dataset, 5, train_transform=GetTrainTransform(), val_transform=GetValTransform())
+	for pretrained, batch_size, lr, model_name, (fold, (train_set, val_set)) in product(
+		param.pretrained_lst, param.batch_size_lst, param.lr_lst, param.model_lst, enumerate(gen)
+	):
+		print(f'model: {model_name}, pretrained: {pretrained}, batch_size: {batch_size}, lr: {lr}, fold: {fold+1}')
+		train_loader, val_loader = GetDataLoader(train_set, val_set, batch_size, batch_size)
 		print('DataLoader ready')
 
 		try:
 			model = None
 			gc.collect()
 			torch.cuda.empty_cache()
-			model = GetModel(model_name, num_classes, pretrained)
-			model.to(device)
+			model = GetModel(model_name, param.num_classes, pretrained)
+			model.to(param.device)
 		except Exception as e:
 			print(f'Error: {e}, skipped')
 			continue
@@ -87,16 +47,13 @@ def main():
 
 		optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-		# just make linter happy
-		assert train_loader is not None
-		assert val_loader is not None
-
-		param = Trainer.TrainParameters(
-			device=device,
+		train_param = Trainer.TrainParameters(
+			device=param.device,
 			model=model,
-			epochs=epochs,
+			epochs=param.epochs,
+			fold=fold + 1,
 			lr=lr,
-			num_classes=num_classes,
+			num_classes=param.num_classes,
 			train_loader=train_loader,
 			test_loader=val_loader,
 			criterion=criterion,
@@ -104,15 +61,7 @@ def main():
 			batch_size=batch_size,
 			model_name=model_name[5:] if model_name.startswith('timm:') else model_name,
 			pretrained=pretrained,
-			save_path_root=f'{save_path_root}\\{dataset_root[dataset_root.replace('\\', '/').rfind("/")+1:]}',
+			save_path_root=f'{param.save_path_root}\\{param.task_name}',
 		)
 
-		Trainer.Train(param)
-		print(train_loader.dataset.visit, train_loader.dataset.make)  # type: ignore
-
-	if train_loader is not None:
-		train_loader.dataset.stop_thread()  # type: ignore
-
-
-if __name__ == '__main__':
-	main()
+		Trainer.Train(train_param)

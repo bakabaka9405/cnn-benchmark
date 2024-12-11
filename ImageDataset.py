@@ -4,8 +4,6 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision.io import decode_image, ImageReadMode
 import pandas
-import random
-import threading
 
 
 class ImageDataset:
@@ -36,7 +34,6 @@ class ImageDataset:
 				image_path = os.path.join(dataset_dir, row['Image'])
 				if not os.path.exists(image_path):
 					continue
-				# assert image_path.endswith(".jpg")
 
 				self.image_tensors.append(decode_image(image_path, mode=ImageReadMode.RGB).to(device))
 				if row['Label'] not in label_dict:
@@ -53,71 +50,35 @@ class ImageDataset:
 	def __getitem__(self, idx: int):
 		return self.image_tensors[idx], self.labels[idx]
 
-	def random_split(self, train_transform: transforms.Compose, val_transform: transforms.Compose, ratio: float):
-		index = [i for i in range(len(self.labels))]
-		random.shuffle(index)
 
-		train_size = int(ratio * len(self.labels))
+class TrainingSubset(Dataset):
+	labels: list[int]
+	buffer: list[torch.Tensor]
+	device: torch.device
 
-		class TrainingSubSet(Dataset):
-			def __init__(self, dataset: ImageDataset, indices: list[int], train_transform: transforms.Compose):
-				self.dataset = dataset
-				self.indices = indices
-				self.transform = train_transform
-				self.buffer: list[list[torch.Tensor]] = [[] for i in range(len(indices))]
-				self.next_index: list[int] = [0 for i in range(len(indices))]
-				self.thread_next_index: list[int] = [0 for i in range(len(indices))]
-				self.thread: threading.Thread | None = None
-				self.thread_end = False
-				self.make = 0
-				self.visit = 0
+	def __init__(self, dataset: ImageDataset, indices: list[int], train_transform: transforms.Compose):
+		self.labels = [dataset.labels[i] for i in indices]
+		self.buffer = [dataset.image_tensors[i] for i in indices]
+		self.transform = train_transform
 
-				for p in range(len(indices)):
-					image = dataset.image_tensors[indices[p]]
-					for _ in range(32):
-						self.buffer[p].append(self.transform(image))
+	def __len__(self):
+		return len(self.labels)
 
-			def __len__(self):
-				return len(self.indices)
+	def __getitem__(self, idx: int):
+		return self.transform(self.buffer[idx]), self.labels[idx]
 
-			def __getitem__(self, idx: int):
-				self.visit += 1
-				res = self.buffer[idx][self.next_index[idx]], self.dataset.labels[self.indices[idx]]
-				self.next_index[idx] = (self.next_index[idx] + 1) & 31
-				return res
 
-			def start_make_buffer(self):
-				def make_buffer():
-					p = 0
-					while not self.thread_end:
-						idx = self.thread_next_index[p]
-						image = self.dataset.image_tensors[self.indices[p]]
-						self.buffer[p][idx] = self.transform(image)
-						idx = (idx + 1) & 31
-						self.thread_next_index[p] = idx
-						p = (p + 1) % len(self.indices)
-						self.make += 1
+class ValidationSubSet(Dataset):
+	labels: list[int]
+	buffer: list[torch.Tensor]
+	device: torch.device
 
-				self.thread = threading.Thread(target=make_buffer)
-				self.thread.start()
+	def __init__(self, dataset: ImageDataset, indices: list[int], val_transform: transforms.Compose):
+		self.labels = [dataset.labels[i] for i in indices]
+		self.buffer = [val_transform(dataset.image_tensors[i]) for i in indices]
 
-			def stop_thread(self):
-				self.thread_end = True
-				if self.thread is not None:
-					self.thread.join()
+	def __len__(self):
+		return len(self.labels)
 
-		class ValidationSubSet(Dataset):
-			labels: list[int]
-			buffer: list[torch.Tensor]
-
-			def __init__(self, dataset: ImageDataset, indices: list[int], val_transform: transforms.Compose):
-				self.labels = [dataset.labels[i] for i in indices]
-				self.buffer = [val_transform(dataset.image_tensors[i]) for i in indices]
-
-			def __len__(self):
-				return len(self.labels)
-
-			def __getitem__(self, idx: int):
-				return self.buffer[idx], self.labels[idx]
-
-		return TrainingSubSet(self, index[:train_size], train_transform), ValidationSubSet(self, index[train_size:], val_transform)
+	def __getitem__(self, idx: int):
+		return self.buffer[idx], self.labels[idx]
